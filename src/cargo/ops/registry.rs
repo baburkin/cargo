@@ -7,7 +7,7 @@ use std::time::Duration;
 use std::{cmp, env};
 
 use crates_io::{NewCrate, NewCrateDependency, Registry};
-use curl::easy::{Easy, InfoType, SslOpt};
+use curl::easy::{Easy, InfoType, SslOpt, Auth};
 use failure::{bail, format_err};
 use log::{log, Level};
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
@@ -409,12 +409,14 @@ pub fn http_handle_and_timeout(config: &Config) -> CargoResult<(Easy, HttpTimeou
 
 pub fn needs_custom_http_transport(config: &Config) -> CargoResult<bool> {
     let proxy_exists = http_proxy_exists(config)?;
+    let proxy_auth_exists = http_proxy_auth_exists(config)?;
     let timeout = HttpTimeout::new(config)?.is_non_default();
     let cainfo = config.get_path("http.cainfo")?;
     let check_revoke = config.get_bool("http.check-revoke")?;
     let user_agent = config.get_string("http.user-agent")?;
 
     Ok(proxy_exists
+        || proxy_auth_exists
         || timeout
         || cainfo.is_some()
         || check_revoke.is_some()
@@ -425,6 +427,9 @@ pub fn needs_custom_http_transport(config: &Config) -> CargoResult<bool> {
 pub fn configure_http_handle(config: &Config, handle: &mut Easy) -> CargoResult<HttpTimeout> {
     if let Some(proxy) = http_proxy(config)? {
         handle.proxy(&proxy)?;
+    }
+    if let Some(proxy_auth) = http_proxy_auth(config)? {
+        handle.proxy_auth(&proxy_auth)?;
     }
     if let Some(cainfo) = config.get_path("http.cainfo")? {
         handle.cainfo(&cainfo.val)?;
@@ -543,6 +548,34 @@ fn http_proxy_exists(config: &Config) -> CargoResult<bool> {
             .iter()
             .any(|v| env::var(v).is_ok()))
     }
+}
+
+/// Finds an explicit HTTP proxy authentication method if one is available.
+///
+/// Checks cargo's `http.proxy-auth`. This will be passed on
+/// to libcurl via respective `Auth` parameter.
+fn http_proxy_auth(config: &Config) -> CargoResult<Option<&Auth>> {
+    if let Some(s) = config.get_string("http.proxy-auth")? {
+        let val = match s {
+            Some("ntlm")         => Some(Auth::new().ntlm(true)),
+            Some("ntlm_wb")      => Some(Auth::new().ntlm_wb(true)),
+            Some("gssnegotiate") => Some(Auth::new().gssnegotiate(true)),
+            Some("basic")        => Some(Auth::new().basic(true)),
+            Some("digest")       => Some(Auth::new().digest(true)),
+            Some("digest_ie")    => Some(Auth::new().digest_ie(true)),
+            _ => Ok(None)
+        };
+        return Ok(&*val);
+    }
+    Ok(None)
+}
+
+/// Determine if HTTP proxy authentication method is provided.
+fn http_proxy_auth_exists(config: &Config) -> CargoResult<bool> {
+    if http_proxy_auth(config)?.is_some() {
+        return Ok(true)
+    }
+    Ok(false)
 }
 
 pub fn registry_login(
