@@ -428,6 +428,12 @@ pub fn configure_http_handle(config: &Config, handle: &mut Easy) -> CargoResult<
     if let Some(proxy) = http_proxy(config)? {
         handle.proxy(&proxy)?;
     }
+    if let Some(proxy_username) = config.get_string("http.proxy-username")? {
+        handle.proxy_username(&proxy_username.val)?;
+    }
+    if let Some(proxy_password) = config.get_string("http.proxy-password")? {
+        handle.proxy_password(&proxy_password.val)?;
+    }
     if let Some(proxy_auth) = http_proxy_auth(config)? {
         handle.proxy_auth(&proxy_auth)?;
     }
