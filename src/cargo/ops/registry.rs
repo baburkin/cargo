@@ -554,18 +554,19 @@ fn http_proxy_exists(config: &Config) -> CargoResult<bool> {
 ///
 /// Checks cargo's `http.proxy-auth`. This will be passed on
 /// to libcurl via respective `Auth` parameter.
-fn http_proxy_auth(config: &Config) -> CargoResult<Option<&Auth>> {
+fn http_proxy_auth(config: &Config) -> CargoResult<Option<Auth>> {
     if let Some(s) = config.get_string("http.proxy-auth")? {
-        let val = match s {
-            Some("ntlm")         => Some(Auth::new().ntlm(true)),
-            Some("ntlm_wb")      => Some(Auth::new().ntlm_wb(true)),
-            Some("gssnegotiate") => Some(Auth::new().gssnegotiate(true)),
-            Some("basic")        => Some(Auth::new().basic(true)),
-            Some("digest")       => Some(Auth::new().digest(true)),
-            Some("digest_ie")    => Some(Auth::new().digest_ie(true)),
-            _ => Ok(None)
+        let mut auth = Auth::new();
+        match s.val.as_ref() {
+            "ntlm"         => auth.ntlm(true),
+            "ntlm_wb"      => auth.ntlm_wb(true),
+            "gssnegotiate" => auth.gssnegotiate(true),
+            "basic"        => auth.basic(true),
+            "digest"       => auth.digest(true),
+            "digest_ie"    => auth.digest_ie(true),
+            _              => return Ok(None)
         };
-        return Ok(&*val);
+        return Ok(Some(auth));
     }
     Ok(None)
 }
